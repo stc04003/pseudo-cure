@@ -303,6 +303,24 @@ fit.lat2$coef[abs(fit.lat2$coef) > 1e-3]
 ```
 
 
+## MC model: Regularized Cox cure rate model with `intsurv`
+
+Variable selection under the MC model is also available via the `cox_cure_net()` function from the `intsurv` package @intsurv-package.
+The LASSO penalty is used in the following example.
+```{R}
+library(intsurv)
+system.time(
+  fit.intsurv <- cox_cure_net(fn, fn, data = Teeth1,
+                              time = time, event = event,
+                              surv_nlambda = 10, cure_nlambda = 10,
+                              surv_alpha = 1, cure_alpha = 1,
+                              surv_l1_penalty_factor = c(-1e-10, rep(43)),
+                              cure_l1_penalty_factor = c(1, -1e10, rep(43))))
+```
+```{R}
+lapply(coef(fit.intsurv), function(x) x[x != 0])
+```
+
 ## BCH model
 
 As in the MC model, the proposed pseudo-observation approach allows the 

@@ -23,6 +23,7 @@ Teeth1 <- do.call(rbind, lapply(split(Teeth, Teeth$id),
 ## Test for cure
 npcure::testmz(time, event, Teeth1)
 
+
 ## #######################################################################
 ## Pseudo-observation approach for mixture cure model
 ## #######################################################################
@@ -117,6 +118,20 @@ fit.lat2 <- PGEE(as.formula(paste("y ~", fn2)[2]), id = id, data = Teeth.lat,
                  beta_int = fit.lat$beta, lambda = cv$lam.opt, pindex = 1:11)
 
 fit.lat2$coef[abs(fit.lat2$coef) > 1e-3]
+
+## #######################################################################
+## With the intsurv package
+## #######################################################################
+
+library(intsurv)
+system.time(
+  fit.intsurv <- cox_cure_net(fn, fn, data = Teeth1,
+                              time = time, event = event,
+                              surv_nlambda = 10, cure_nlambda = 10,
+                              surv_alpha = 1, cure_alpha = 1,
+                              surv_l1_penalty_factor = c(-1e-10, rep(43)),
+                              cure_l1_penalty_factor = c(1, -1e10, rep(43))))
+lapply(coef(fit.intsurv), function(x) x[x != 0])
 
 ## #######################################################################
 ## Pseudo-observation approach for Bounded cumulative hazard model

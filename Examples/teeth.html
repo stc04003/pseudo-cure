@@ -276,7 +276,7 @@ MathJax.Hub.Config({
 <h2>The Dental data</h2>
 <div id="data-preparation" class="section level3">
 <h3>Data preparation</h3>
-<p>The dataset is available from the R package <code>MST</code> <span class="citation">(Calhoun et al. 2018)</span>:</p>
+<p>The data set is available from the R package <code>MST</code> <span class="citation">(Calhoun et al. 2018)</span>:</p>
 <pre class="r"><code>&gt; data(Teeth, package = &quot;MST&quot;)
 &gt; head(Teeth[,1:10])</code></pre>
 <pre><code>      x1        x2        x3       x4 x5       x6 x7        x8 x9 x10
@@ -287,7 +287,7 @@ MathJax.Hub.Config({
 57587  0  33.33333  50.00000 2.500000  3 6.666667  9 4.1666667  7   0
 57588  1   0.00000  66.66667 2.833333  4 3.833333  5 1.0000000  2   0</code></pre>
 <p>The <code>Teeth</code> data is a <code>data.frame</code> that contains 65228 patients and the 56 variables.</p>
-<p>The dataset contains dental records from 5336 patients with periodontal disease collected between August 2007 and March 2013. Among the 5336 patients, 1382 patients experienced at least one periodontal tooth loss. The outcome of interest is the time to the first tooth loss due to periodontal reasons for each patient, yielding a censoring rate of 74.1%. The data analysis includes a total of 44 risk factors, whose detailed descriptions can be found in Tables 3 and 4 in <span class="citation">Calhoun et al. (2018)</span>. The length of the follow-up was 5.7 years, and the last event occurred at 5.37 years for both malar and non-malar groups. There were 35 and 20 teeth censored between the last event and the end of the study for the malor group and non-molars group, respectively.</p>
+<p>The data set contains dental records from 5336 patients with periodontal disease collected between August 2007 and March 2013. Among the 5336 patients, 1382 patients experienced at least one periodontal tooth loss. The outcome of interest is the time to the first tooth loss due to periodontal reasons for each patient, yielding a censoring rate of 74.1%. The data analysis includes a total of 44 risk factors, whose detailed descriptions can be found in Tables 3 and 4 in <span class="citation">Calhoun et al. (2018)</span>. The length of the follow-up was 5.7 years, and the last event occurred at 5.37 years for both molar and non-molar groups. There were 35 and 20 teeth censored between the last event and the end of the study for the malor group and non-molars group, respectively.</p>
 <p>We convert <code>factor</code> variables into <code>numeric</code> variables to make it compatible with the <code>PGEE</code> package <span class="citation">(Inan, Zhou, and Wang 2017)</span>.</p>
 <pre class="r"><code>&gt; Teeth$x15 &lt;- 1 * !(Teeth$x15 == &quot;No Crown&quot;)
 &gt; Teeth$x16 &lt;- 1 * !(Teeth$x16 == &quot;No Endo Therapy&quot;)
@@ -458,8 +458,8 @@ Correlation Model:
 
 Returned Error Value:    1 
 Number of clusters:   5336   Maximum cluster size: 1 </code></pre>
-<p>With the initial value from <code>fit.inc</code>, we perform the variable selection procedure based on penalized generalized estimating equations implemented in the <code>PGEE</code> package <span class="citation">(Inan, Zhou, and Wang 2017)</span>. The implementation cross-validation procedure in <code>PGEE</code> is entirely written in R, with multiple layers of loops, resulting in an unbearable computation burden when applying it to the dental data. We re-implemented the cross-validation procedure package in <code>C++</code> to improve the computational speed. We modify the <code>PGEE</code> package and create the alternative package <code>modifiedPGEE</code> to replace <code>PGEE</code> in our illustration. The source code of the <code>modifiedPGEE</code> package is in our <code>codes/</code> folder.</p>
-<pre class="r"><code>&gt; ## install.packages(&quot;../codes/modifiedPGEE_0.0.1.tar.gz&quot;, repo = NULL, type = &quot;source&quot;) ## to install modifiedPGEE from source code
+<p>With the initial value from <code>fit.inc</code>, we perform the variable selection procedure based on penalized generalized estimating equations implemented in the <code>PGEE</code> package <span class="citation">(Inan, Zhou, and Wang 2017)</span>. The implementation cross-validation procedure in <code>PGEE</code> is entirely written in R, with multiple layers of loops, resulting in an unbearable computation burden when applying it to the dental data. We re-implemented the cross-validation procedure package in <code>C++</code> to improve the computational speed. We modify the <code>PGEE</code> package and create the alternative package <code>modifiedPGEE</code> to replace <code>PGEE</code> in our illustration. The source code of the <code>modifiedPGEE</code> package is in our <code>codes/</code> folder. The implementation uses the smoothly clipped absolute deviations (SCAD) penalty.</p>
+<pre class="r"><code>&gt; ## install.packages(&quot;modifiedPGEE_0.0.1.tar.gz&quot;, repo = NULL, type = &quot;source&quot;) ## to install modifiedPGEE from source code
 &gt; library(modifiedPGEE)
 &gt; packageVersion(&quot;modifiedPGEE&quot;)</code></pre>
 <pre><code>[1] &#39;0.0.1&#39;</code></pre>
@@ -628,6 +628,34 @@ Number of clusters:   5336   Maximum cluster size: 10 </code></pre>
 -1.012826707  0.016642204  0.827208946  0.006093806  0.606416144  0.365490076 </code></pre>
 </div>
 </div>
+<div id="mc-model-regularized-cox-cure-rate-model-with-intsurv" class="section level2">
+<h2>MC model: Regularized Cox cure rate model with <code>intsurv</code></h2>
+<p>Variable selection under the MC model is also available via the <code>cox_cure_net()</code> function from the <code>intsurv</code> package <span class="citation">Wang (2019)</span>. The LASSO penalty is used in the following example.</p>
+<pre class="r"><code>&gt; library(intsurv)
+&gt; system.time(
++   fit.intsurv &lt;- cox_cure_net(fn, fn, data = Teeth1,
++                               time = time, event = event,
++                               surv_nlambda = 10, cure_nlambda = 10,
++                               surv_alpha = 1, cure_alpha = 1,
++                               surv_l1_penalty_factor = c(-1e-10, rep(43)),
++                               cure_l1_penalty_factor = c(1, -1e10, rep(43))))</code></pre>
+<pre><code>    user   system  elapsed 
+7702.701    2.375 1021.783 </code></pre>
+<pre class="r"><code>&gt; lapply(coef(fit.intsurv), function(x) x[x != 0])</code></pre>
+<pre><code>$surv
+        x1        x12        x35 
+0.35111107 0.06290289 0.07082058 
+
+$cure
+(Intercept)         x52          x1          x2          x4          x7 
+-2.70584550 -0.51166551  0.46240998  0.00248756  0.42002541  0.07405349 
+        x12         x13         x16         x20         x21         x25 
+ 0.02856993  0.15155925  1.15142159 -0.47610750  0.65759867  0.02462911 
+        x26         x35         x36         x42         x48         x49 
+ 0.02370013  0.78077796  0.10122976  0.04607426  0.01355970 -0.02541194 
+        x51 
+ 0.14049771 </code></pre>
+</div>
 <div id="bch-model" class="section level2">
 <h2>BCH model</h2>
 <p>As in the MC model, the proposed pseudo-observation approach allows the <strong>short-term</strong> and <strong>long-term</strong> covaraites effects in the BCH model to be estimated separately.</p>
@@ -727,7 +755,7 @@ Number of clusters:   5336   Maximum cluster size: 1 </code></pre>
 +               fold = 5, lambda.vec = 1:45 / 50, pindex = 1:2)
 + )</code></pre>
 <pre><code>    user   system  elapsed 
-1224.844    0.080 1225.031 </code></pre>
+1204.661    0.036 1204.756 </code></pre>
 <p>With the tuning parameter from cross-validation, we can fit the penalized generalized estimating equation with the following.</p>
 <pre class="r"><code>&gt; fit.long2 &lt;- PGEE(as.formula(paste(&quot;y ~&quot;, fn)[2]), id = id, data = Teeth.long, 
 +                  family = gaussian(link = &quot;log&quot;), scale.fix = TRUE,
@@ -853,7 +881,7 @@ Number of clusters:   5336   Maximum cluster size: 10 </code></pre>
 +               fold = 5, lambda.vec = 1:45 / 50, pindex = 1:11)
 + )</code></pre>
 <pre><code>    user   system  elapsed 
-3500.944    3.956 3505.009 </code></pre>
+3339.988    4.248 3344.400 </code></pre>
 <p>With the tuning parameter from cross-validation, we can fit the penalized generalized estimating equation with the following.</p>
 <pre class="r"><code>&gt; fit.short2 &lt;- PGEE(as.formula(paste(&quot;y ~&quot;, fn2)[2]), id = id, data = Teeth.short, 
 +                  family = gaussian(link = &quot;cloglog&quot;), scale.fix = TRUE,
@@ -891,6 +919,9 @@ Tsodikov, A. 2002. <span>“Semi-Parametric Models of Long-and Short-Term Surviv
 </div>
 <div id="ref-tsodikov2003estimating" class="csl-entry">
 Tsodikov, A., J. G. Ibrahim, and A. Y. Yakovlev. 2003. <span>“Estimating Cure Rates from Survival Data: <span>A</span>n Alternative to Two-Component Mixture Models.”</span> <em>Journal of the American Statistical Association</em> 98 (464): 1063–78.
+</div>
+<div id="ref-intsurv-package" class="csl-entry">
+Wang, W. 2019. <em><span class="nocase">intsurv</span>: <span>I</span>ntegrative Survival Models</em>. <a href="https://github.com/wenjie2wang/intsurv">https://github.com/wenjie2wang/intsurv</a>.
 </div>
 </div>
 </div>
