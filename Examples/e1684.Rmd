@@ -21,20 +21,20 @@ MathJax.Hub.Config({
 </script>
 
 \newcommand{\Skm}{ {\hat{S}_{\scriptsize\text{KM}}}}
-\newcommand{\Skmi}{ {\hat{S}^i_{\scriptsize\text{KM}}}}
-\newcommand{\Skmoi}{ {\hat{S}^{-i}_{\scriptsize\text{KM}}}}
+\newcommand{\Skmi}{ {\hat{S}^{(i)}_{\scriptsize\text{KM}}}}
+\newcommand{\Skmoi}{ {\hat{S}^{(-i)}_{\scriptsize\text{KM}}}}
 \newcommand{\Fkm}{ {\hat{F}_{\scriptsize\text{KM}}}}
-\newcommand{\Fkmi}{ {\hat{F}^i_{\scriptsize\text{KM}}}}
-\newcommand{\Fkmoi}{ {\hat{F}^{-i}_{\scriptsize\text{KM}}}}
+\newcommand{\Fkmi}{ {\hat{F}^{(i)}_{\scriptsize\text{KM}}}}
+\newcommand{\Fkmoi}{ {\hat{F}^{(-i)}_{\scriptsize\text{KM}}}}
 \newcommand{\Tkm}{ {\hat{\theta}_{\scriptsize\text{KM}}}}
-\newcommand{\Tkmi}{ {\hat{\theta}^i_{\scriptsize\text{KM}}}}
-\newcommand{\Tkmoi}{ {\hat{\theta}^{-i}_{\scriptsize\text{KM}}}}
+\newcommand{\Tkmi}{ {\hat{\theta}^{(i)}_{\scriptsize\text{KM}}}}
+\newcommand{\Tkmoi}{ {\hat{\theta}^{(-i)}_{\scriptsize\text{KM}}}}
 \newcommand{\Su}{ {\hat{S}_u}}
-\newcommand{\Sui}{ {\hat{S}^i_u}}
-\newcommand{\Suoi}{ {\hat{S}^{-i}_u}}
+\newcommand{\Sui}{ {\hat{S}^{(i)}_u}}
+\newcommand{\Suoi}{ {\hat{S}^{(-i)}_u}}
 \newcommand{\pikm}{ {\hat{\pi}_{\scriptsize\text{KM}}}}
-\newcommand{\pikmi}{ {\hat{\pi}^i_{\scriptsize\text{KM}}}}
-\newcommand{\pikmoi}{ {\hat{\pi}^{-i}_{\scriptsize\text{KM}}}}
+\newcommand{\pikmi}{ {\hat{\pi}^{(i)}_{\scriptsize\text{KM}}}}
+\newcommand{\pikmoi}{ {\hat{\pi}^{(-i)}_{\scriptsize\text{KM}}}}
 
 In the following,
 we apply the proposed method to a melanoma data from the Eastern Cooperative Oncology Group phase III clinical trial e1684
@@ -161,7 +161,8 @@ The main arguments are following (see `?smcure::smcure` for a full list).
 
 The following fits `smcure()` to `e1684` with covaraites `AGE`, `TRT`, and `SEX` and 100 bootstrap samples.
 ```{R, error = TRUE}
-smcure(Surv(FAILTIME, FAILCENS) ~ AGE + TRT + SEX, ~ AGE + TRT + SEX,
+smcure(Surv(FAILTIME, FAILCENS) ~ AGE + TRT + SEX, 
+       ~ AGE + TRT + SEX,
   data = e1684, model = "ph", nboot = 100)
 ```
 
@@ -171,14 +172,15 @@ specifying interaction terms such as `TRT * SEX`.
 To include the interaction terms `TRT * SEX` in `smcure()`, we need to manually specify the following. 
 ```{R}
 e1684$TRT.SEX <- e1684$TRT * e1684$SEX
-coxPHMC <- smcure(Surv(FAILTIME, FAILCENS) ~ AGE + TRT + SEX + TRT.SEX, ~ AGE + TRT + SEX + TRT.SEX, 
+coxPHMC <- smcure(Surv(FAILTIME, FAILCENS) ~ AGE + TRT + SEX + TRT.SEX, 
+                  ~ AGE + TRT + SEX + TRT.SEX, 
                   data = e1684, model = "ph", nboot = 100)
 ```
 The estimate of cure rate under the EM-based approach can be computed with the following codes.
 ```{R}
 newDat <- expand.grid(TRT = 0:1, SEX = 0:1)
 newDat$AGE <- with(e1684, tapply(AGE, interaction(TRT, SEX), mean))
-newDat$cure.EM <- 1 - 1 / (1 + exp(-model.matrix(~ AGE + TRT*SEX, data = newDat) %*% coxPHMC$b)) 
+newDat$cure.EM <- 1 - 1 / (1 + exp(-model.matrix(~ AGE + TRT * SEX, data = newDat) %*% coxPHMC$b)) 
 newDat
 ```
 
@@ -224,7 +226,8 @@ summary(fit.inc)
 We follow the idea of pseudo-residuals @andersen2010pseudo to assess the goodness-of-fit.
 We calculate and plot the pseudo residuals with the following code.
 ```{R}
-e1684.inc$resid <- e1684.inc$curei - 1 / (exp(-model.matrix(~ AGE + TRT * SEX, e1684.inc) %*% fit.inc$beta) + 1)
+e1684.inc$resid <- e1684.inc$curei - 
+  1 / (exp(-model.matrix(~ AGE + TRT * SEX, e1684.inc) %*% fit.inc$beta) + 1)
 ggplot(e1684.inc, aes(x = interaction(TRT, SEX), y = resid, fill = interaction(TRT, SEX))) +
   geom_boxplot() + ylab("Residual") +
   scale_fill_discrete(labels = c("Control/Male", "Control/Female", 
@@ -238,7 +241,7 @@ ggplot(e1684.inc, aes(x = interaction(TRT, SEX), y = resid, fill = interaction(T
 
 The estimate of cure rate under the proposed pseudo-observation based approach can be computed with the following codes.
 ```{R}
-newDat$cure.ps <- 1 - 1 / (1 + exp(-model.matrix(~ AGE + TRT*SEX, data = newDat) %*% fit.inc$b)) 
+newDat$cure.ps <- 1 - 1 / (1 + exp(-model.matrix(~ AGE + TRT * SEX, data = newDat) %*% fit.inc$b)) 
 newDat
 ```
 
