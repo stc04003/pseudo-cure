@@ -1,0 +1,404 @@
+---
+title: "Analyzing the melanoma data with pseudo-observation approaches"
+data: March 25, 2022
+output:
+  rmarkdown::html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+bibliography: ReferenceCure.bib
+---
+
+```{r default, include = FALSE, collapse = TRUE}
+library(knitr)
+opts_chunk$set(prompt = TRUE, comment = "", cache = TRUE)
+```
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Config({
+  TeX: { equationNumbers: { autoNumber: "AMS" } }
+});
+</script>
+
+\newcommand{\Skm}{ {\hat{S}_{\scriptsize\text{KM}}}}
+\newcommand{\Skmi}{ {\hat{S}^i_{\scriptsize\text{KM}}}}
+\newcommand{\Skmoi}{ {\hat{S}^{-i}_{\scriptsize\text{KM}}}}
+\newcommand{\Fkm}{ {\hat{F}_{\scriptsize\text{KM}}}}
+\newcommand{\Fkmi}{ {\hat{F}^i_{\scriptsize\text{KM}}}}
+\newcommand{\Fkmoi}{ {\hat{F}^{-i}_{\scriptsize\text{KM}}}}
+\newcommand{\Tkm}{ {\hat{\theta}_{\scriptsize\text{KM}}}}
+\newcommand{\Tkmi}{ {\hat{\theta}^i_{\scriptsize\text{KM}}}}
+\newcommand{\Tkmoi}{ {\hat{\theta}^{-i}_{\scriptsize\text{KM}}}}
+\newcommand{\Su}{ {\hat{S}_u}}
+\newcommand{\Sui}{ {\hat{S}^i_u}}
+\newcommand{\Suoi}{ {\hat{S}^{-i}_u}}
+\newcommand{\pikm}{ {\hat{\pi}_{\scriptsize\text{KM}}}}
+\newcommand{\pikmi}{ {\hat{\pi}^i_{\scriptsize\text{KM}}}}
+\newcommand{\pikmoi}{ {\hat{\pi}^{-i}_{\scriptsize\text{KM}}}}
+
+In the following,
+we apply the proposed method to a melanoma data from the Eastern Cooperative Oncology Group phase III clinical trial e1684
+[@kirkwood1996interferon].
+We illustrated both the mixture cure (MC) and bounded cumulative hazard (BCH) models.
+
+## The Melanoma data
+### Data preparation
+The dataset is available from the R package `smcure` [@cai2012smcure]:
+```{R}
+data(e1684, package = "smcure")
+head(e1684)
+```
+The `e1684` data is a `data.frame` that contains 284 patients and the five variables. The five variables are:
+
+  - `TRT` Treatment indicator; 1 = IFN treatment, 0 = control group
+  - `FAILTIME` Observed relapse-free time; 1 = event
+  - `FAILCENS` Censoring indicator, 1 = relapse of melanoma happens, 0 = censoring
+  - `AGE` Patients' age, centered to the mean
+  - `SEX` Patients' gender; 1 = female, 0 = male
+
+The event of interest is the relapse of melanoma and
+the primary objective is to determine whether the high dose interferon alpha-2b (IFN)
+regimen in postoperative adjuvant therapy would lead to a significantly
+prolonged interval of relapse-free for melanoma. 
+
+We remove missing values from the original dataset.
+```{R}
+e1684 <- na.omit(e1684)
+```
+
+### Checking for cure
+
+The following figure shows the Kaplan-Meier (KM) estimate stratified by `TRT` and `SEX`.
+```{R, message = FALSE}
+library(survival)
+library(survminer)
+ggsurvplot(survfit(Surv(FAILTIME, FAILCENS) ~ TRT + SEX, data = e1684),
+           legend.title = "", 
+           legend.labs = c("Control/Male", "Control/Female", "Treatment/Male", "Treatment/Female")) +  
+  labs(title = "The melanoma data")
+```
+The KM estimates level off at the end, 
+suggesting a fraction of nonsusceptibility to the recurrence of melanoma.
+This observation is confirmed by the Maller-Zhou test \citep{maller1992estimating} with a $p$-value of $< 0.001$.
+```{R}
+npcure::testmz(FAILTIME, FAILCENS, e1684)
+```
+
+## Notations and models
+
+### Notations
+We define the following notations. 
+
+  - $Y$: cure status of a subject; 
+      - $Y = 1$ if the subject eventually experiences an event (uncured, susceptible)
+      - $Y = 0$ if the subject is a survivor (cured, non-susceptible).
+      
+  - $T$: survival time; 
+      - $T=YT^{*}+(1-Y)\times\infty$where $T^{*}<\infty$ is the failure time if the subject is susceptible.
+      
+  - $\tilde T$: observed survival time;  
+      - $\tilde{T}=\min\{T,C \}$, where $C$ is the censoring time. 
+      
+  - $\delta$: censoring indicator;
+      - $\delta = 1$, the subject experienced an event. This implies $Y=1$.
+      - $\delta = 0$, the subject was censored. The cure status $Y$ is not observed.
+      
+  - $X$ and $Z$ are vectors of covariates with dimensions $p$ and $q$, respectively.
+
+### Mixture cure model
+
+The MC model expresses the population survival function as
+\begin{equation}
+  \label{mixture}
+  S(t)=(1-\pi)+\pi S_{u}(t),
+\end{equation}
+where $\pi=P(Y=1)$ is the uncured rate and $S_{u}(t)$ is the conditional survival function of $T^*$ given $Y=1$.
+The two components, ***incidence*** and ***latency***, are modeled by the logistic regression model and the Cox proportional hazards model, respectively.
+We term this the PHMC model.
+
+
+### Bounded cumulative hazard model
+
+Suppose $\Lambda(t)$  is the cumulative hazard function of $T^*$ such that $\Lambda(\infty)=\theta>0$.
+Under the BCH model, the population survival function can be written as 
+\begin{equation*}\label{NonMC}
+  S(t)=\exp\{-\theta F(t)\},
+\end{equation*}
+where $F(t)=\Lambda(t)/\theta$ is a proper cumulative distribution function of a nonnegative random variable with
+$F(0)=0$ and $F(\infty)=\Lambda(\infty)/\theta=1$. 
+As $t\rightarrow \infty$,
+one has $\lim_{t\rightarrow \infty}S(t)=\exp(-\theta)$ which indicates the cure rate.
+The covariates have a **long-term** effect because $\theta$ describes the long-term survival probability.
+A common choice of $\theta(\cdot)$ is  $\theta( X)=\exp(\gamma_0+ \gamma^\top  X)$.
+@tsodikov2002semi extends the improper PH model by adding a **short-term** effect
+by incorporating covariates into $F(t)$ or survival function $\bar{F}(t)=1-F(t)$.
+The PHPH model of @tsodikov2003estimating has the form
+\begin{equation}
+\label{PHPH}
+  S(t)=\exp[-\theta( X)\{ 1-\bar{F}(t)^{\eta ( Z)} \} ],
+\end{equation}
+where $\eta ( Z)=\exp( \phi^\top  Z)$ and  $ \phi$ is a $q$-column vector of regression coefficients.
+To avoid overparameterization, we assume
+the coefficients $ \phi$ do not contain an intercept term as suggested in @tsodikov2003estimating.
+
+## MC model: The EM-based approach
+
+The EM-based approach proposed by @peng2000nonparametric is available in 
+the `smcure()` function form the R package `smcure` [@cai2012smcure]. 
+The arguments of `smcure()` are as follows
+```{R}
+library(smcure)
+packageVersion("smcure")
+args(smcure)
+```
+The main arguments are following (see `?smcure::smcure` for a full list).
+
+  - `formula` a formula object to specify the variables included in the **latency** component of the MC model
+  - `cureform`  a formula object to specify the variables included in the **incidence** component of the MC model
+  - `data` a `data.frame` in which to interpret the variables occurring in the `formula` and `cureform`
+  - `model` a character string to specify the latency model
+  - `nboot` an integer to specify number of bootstrap sampling
+
+The following fits `smcure()` to `e1684` with covaraites `AGE`, `TRT`, and `SEX` and 100 bootstrap samples.
+```{R, error = TRUE}
+smcure(Surv(FAILTIME, FAILCENS) ~ AGE + TRT + SEX, ~ AGE + TRT + SEX,
+  data = e1684, model = "ph", nboot = 100)
+```
+
+There are some drawbacks in the implementation of the `smcure()` function. 
+One of which is in the `cureform` argument, which does not organize conventional approaches to 
+specifying interaction terms such as `TRT * SEX`.
+To include the interaction terms `TRT * SEX` in `smcure()`, we need to manually specify the following. 
+```{R}
+e1684$TRT.SEX <- e1684$TRT * e1684$SEX
+coxPHMC <- smcure(Surv(FAILTIME, FAILCENS) ~ AGE + TRT + SEX + TRT.SEX, ~ AGE + TRT + SEX + TRT.SEX, 
+                  data = e1684, model = "ph", nboot = 100)
+```
+The estimate of cure rate under the EM-based approach can be computed with the following codes.
+```{R}
+newDat <- expand.grid(TRT = 0:1, SEX = 0:1)
+newDat$AGE <- with(e1684, tapply(AGE, interaction(TRT, SEX), mean))
+newDat$cure.EM <- 1 - 1 / (1 + exp(-model.matrix(~ AGE + TRT*SEX, data = newDat) %*% coxPHMC$b)) 
+newDat
+```
+
+
+## MC model: The proposed pseudo-observation approach
+
+The proposed pseudo-observation approach estimates the regression coefficients in the incidence component and latency component separately. 
+
+### Incidence component
+
+The mixture cure model has two parameters, uncured rate $\pi$ and the conditional survival function $S_u(t)$, to be estimated. 
+The cure rate $1 - \pi$ can be estimated by $\Skm(t_{\max})$, 
+where $\Skm(t)$ is the Kaplan-Meier (KM) estimator [@maller1992estimating].
+The following is used to obtain $\pikm = 1 - \Skm(t_\max)$.
+```{R}
+n <- nrow(e1684)
+tmax <- max(e1684$FAILTIME[e1684$FAILCENS > 0])
+KM <- survfit(Surv(FAILTIME, FAILCENS) ~ 1, data = e1684)
+(cure <- min(KM$surv) )
+```
+
+The pseudo-observations of $\pikm$ for the $i$th subject is
+$$\pikmi = n\cdot\pikm - (n - 1)\cdot\pikmoi,$$
+where $\pikmoi = 1 - \Skmoi(t_\max)$ is the estimator for $\pi$ without the $i$th subject.
+The following creates a `data.frame` with the pseudo-observations of $\pikm$ stored under `curei`.
+```{R}
+e1684.inc <- e1684
+e1684.inc$id <- 1:n
+e1684.inc$curei <- n * (1 - cure) - sapply(1:n, function(k) {
+  cure.deletei <- min(update(KM, subset = -k)$surv)
+  (n - 1) * (1 - cure.deletei)
+})
+head(e1684.inc)
+```
+The regression coefficient is estimated via GEE. 
+```{R}
+library(geepack)
+fit.inc <- geese(curei ~ AGE + TRT * SEX, data = e1684.inc,
+                jack = TRUE, scale.fix = TRUE, family = gaussian, mean.link = "logit")
+
+summary(fit.inc)
+```
+We follow the idea of pseudo-residuals @andersen2010pseudo to assess the goodness-of-fit.
+We calculate and plot the pseudo residuals with the following code.
+```{R}
+e1684.inc$resid <- e1684.inc$curei - 1 / (exp(-model.matrix(~ AGE + TRT * SEX, e1684.inc) %*% fit.inc$beta) + 1)
+ggplot(e1684.inc, aes(x = interaction(TRT, SEX), y = resid, fill = interaction(TRT, SEX))) +
+  geom_boxplot() + ylab("Residual") +
+  scale_fill_discrete(labels = c("Control/Male", "Control/Female", 
+                                 "Treatment/Male", "Treatment/Female")) +
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank(), 
+        axis.ticks.x = element_blank(),
+        legend.title = element_blank(), 
+        legend.position = "bottom")
+```
+
+The estimate of cure rate under the proposed pseudo-observation based approach can be computed with the following codes.
+```{R}
+newDat$cure.ps <- 1 - 1 / (1 + exp(-model.matrix(~ AGE + TRT*SEX, data = newDat) %*% fit.inc$b)) 
+newDat
+```
+
+
+### Latency component
+
+To estimate the regression coefficient in the latency component, we need to create pseudo-observations for $S_u(t)$.
+The MC model \eqref{mixture} implies $S_u(t)$ can be estimated by 
+$$\hat{S}_u(t) = \frac{\Skm(t) - \Skm(t_\max)}{1 - \Skm(t_\max)}.$$
+Thus, the pseudo-observation for $S_u(t)$ can be constructed by 
+\begin{equation*}
+\Sui(t) = n\cdot\Su(t) - (n - 1)\cdot\Suoi(t),
+\end{equation*}
+where
+\begin{equation*}
+\Suoi(t) = \frac{\Suoi(t) - \Suoi(t_\max)}{1 - \Suoi(t_\max)}
+\end{equation*}
+is the estimator for $S_u(t)$ without the $i$ subject.
+The following creates a `data.frame` with the pseudo-observations of $S_u(t)$ at $t = \{t_1, \ldots, t_H\}$ stored under variable `Si`.
+We consider the pseudo-observation times $t$ at the $10, 20, \ldots, 80, 90$, and the 95th percentiles of the observed survival times.
+```{R}
+t0 <- quantile(e1684$FAILTIME[e1684$FAILCENS > 0], c(1:9 / 10, .95))
+S <- KM$surv[findInterval(t0, KM$time)]
+e1684.lat <- e1684[rep(1:n, each = length(t0)),]
+e1684.lat$id <- rep(1:n, each = length(t0))
+e1684.lat$Si <- n * (S - cure) / (1 - cure) - c(sapply(1:n, function(k) { 
+  KM.reduce <- update(KM, subset = -k)
+  S.deletei <- KM.reduce$surv[findInterval(t0, KM.reduce$time)]  
+  cure.deletei <- min(KM.reduce$surv)
+  (n - 1) * (S.deletei - cure.deletei) / (1 - cure.deletei)
+}))
+e1684.lat$Fi <- 1 - e1684.lat$Si
+e1684.lat$t <- as.factor(rep(t0, n))
+rownames(e1684.lat) <- NULL
+head(e1684.lat)
+```
+
+Generalized linear model with a log function, $\log\{-\log(x)\}$, is used to estimate the regression coefficients in the latency component.
+However, the complementary log-log link function in standard R approaches, e.g., `geese()`, corresponds to $\log\{\log(x)\}$.
+We thus fit a GEE model with `Fi` as the response variable. 
+```{R}
+fit.lat <- geese(Fi ~ 0 + t + AGE + TRT * SEX, data = e1684.lat, id = id, 
+                jack = TRUE, scale.fix = TRUE, family = gaussian, mean.link = "cloglog")
+summary(fit.lat)
+```
+
+In general, the implementations of the pseudo-observations construction in the incidence component and latency component can be combined, 
+but we separate those in this example to illustrate the independence of estimating procedures in the two components.
+We calculate and plot the pseudo residuals (at $t_2, t_3, t_4$, and $t_5$) with the following code.
+```{R}
+e1684.lat$resid <- 
+  e1684.lat$Si - exp(-exp(model.matrix(~ 0 + t + AGE + TRT * SEX, e1684.lat) %*% fit.lat$beta))
+levels(e1684.lat$t) <- paste0("t = ", unique(e1684.lat$t))
+ggplot(subset(e1684.lat, t0 %in% t0[2:5 * 2]), 
+       aes(x = interaction(TRT, SEX), y = resid, fill = interaction(TRT, SEX))) +
+  facet_wrap(~ t) + geom_boxplot() + ylab("Residual") +
+  scale_fill_discrete(labels = c("Control/Male", "Control/Female", 
+                                 "Treatment/Male", "Treatment/Female")) +
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank(), 
+        axis.ticks.x = element_blank(),
+        legend.title = element_blank(), 
+        legend.position = "bottom")
+```
+
+The pseudo-residuals fluctuate
+around zero, indicating the adequacy of the proposed GLM even though
+the pseudo-residuals have a larger variation in the Control/Male group.
+
+## BCH model
+
+As in the MC model, the proposed pseudo-observation approach allows the 
+**short-term** and **long-term** covaraites effects in the BCH model to be estimated separately.
+
+### Long-term effect
+
+Since the cure rate $\lim_{t\rightarrow \infty}S(t)=\exp(-\theta)$ can be nonparametrically estimated by $\Skm(t_{\max})$,
+$\theta$ can be estimated by $\Tkm=-\log\Skm(t_{\max})$.
+The pseudo-observation of $\Tkm$ for the $i$th subject is 
+\begin{equation*}
+\Tkmi = n\cdot \Tkm - (n - 1)\cdot\Tkmoi.
+\end{equation*}
+The following codes create a `data.frame` with the pseudo-observation for $\Tkm$ stored under `thetai`.
+
+```{R}
+e1684.long <- e1684
+e1684.long$id <- 1:n
+e1684.long$thetai <- n * (-log(cure)) - sapply(1:n, function(k) {
+  cure.deletei <- min(update(KM, subset = -k)$surv)
+  (n - 1) * (-log(cure.deletei))
+})
+head(e1684.long)
+```
+The regression coefficient is estimated via GEE.
+```{R}
+fit.long <- geese(thetai ~ AGE + TRT * SEX, data = e1684.long,
+                  jack = TRUE, scale.fix = TRUE, family = gaussian, mean.link = "log")
+summary(fit.long)
+```
+
+We calculate and plot the pseudo residuals with the following code.
+```{R}
+e1684.long$resid <- e1684.long$thetai - 
+  exp(model.matrix(~ AGE + TRT * SEX, e1684.long) %*% fit.long$beta)
+ggplot(e1684.long, aes(x = interaction(TRT, SEX), y = resid, fill = interaction(TRT, SEX))) +
+  geom_boxplot() + ylab("Residual") +
+  scale_fill_discrete(labels = c("Control/Male", "Control/Female", 
+                                 "Treatment/Male", "Treatment/Female")) +
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank(), 
+        axis.ticks.x = element_blank(),
+        legend.title = element_blank(), 
+        legend.position = "bottom")
+```
+
+### Short-term effect
+
+Based @tsodikov2002semi, $F(t)$ can be consistently estimated by $\Fkm(t)=\log(\Skm(t))/\log(\Skm(t_{\max}))$.
+Thus, the pseudo-observations for $F(t)$ can be created by 
+\begin{equation*}
+  \Fkmi(t)=n\cdot\Fkm(t)-(n-1)\cdot\Fkmoi(t),
+\end{equation*}
+where $\Fkmoi(t)$ is the estimate of $\Fkm(t)$ without the $i$th subject.
+
+The following creates a `data.frame` with the pseudo-observations of $F(u)$ stored under variable `Fi`. 
+We consider the pseudo-observation times $t$ at the $10,20, \ldots, 80,90$, and the 95th percentiles of the observed survival times.
+```{R}
+e1684.short <- e1684[rep(1:n, each = length(t0)),]
+e1684.short$id <- rep(1:n, each = length(t0))
+e1684.short$Fi <- n * (log(S) / log(cure)) - c(sapply(1:n, function(k) {
+  KM.reduce <- update(KM, subset = -k)
+  S.deletei <- KM.reduce$surv[findInterval(t0, KM.reduce$time)]  
+  cure.deletei <- min(KM.reduce$surv)
+  (n - 1) * log(S.deletei) / log(cure.deletei) 
+}))
+e1684.short$t <- as.factor(rep(t0, n))
+rownames(e1684.short) <- NULL
+head(e1684.short)
+```
+Generalized linear model with a log function, $\log\{−\log(x)\}$, is used to estimate the regression coefficients in the latency component. 
+```{R}
+fit.short <- geese(Fi ~ 0 + t + AGE + TRT * SEX, data = e1684.short,
+             jack = TRUE, scale.fix = TRUE, family = gaussian, mean.link = "cloglog")
+summary(fit.short)
+```
+We calculate and plot the pseudo residuals (at $t_2, t_3, t_4$, and $t_5$) with the following code.
+```{R}
+e1684.short$resid <- 1 - e1684.short$Fi - exp(-exp(
+  model.matrix(~ 0 + t + AGE + TRT * SEX, e1684.short) %*% fit.short$beta))
+levels(e1684.short$t) <- paste0("t = ", unique(e1684.short$t))
+ggplot(subset(e1684.short, t0 %in% t0[2:5 * 2]), 
+       aes(x = interaction(TRT, SEX), y = resid, fill = interaction(TRT, SEX))) +
+  facet_wrap(~ t) + geom_boxplot() + ylab("Residual") +
+  scale_fill_discrete(labels = c("Control/Male", "Control/Female", 
+                                 "Treatment/Male", "Treatment/Female")) +
+  theme(axis.text.x = element_blank(), 
+        axis.title.x = element_blank(), 
+        axis.ticks.x = element_blank(),
+        legend.title = element_blank(), 
+        legend.position = "bottom")
+```
+
+## Reference

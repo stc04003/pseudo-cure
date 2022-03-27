@@ -1,0 +1,8 @@
+.Rhistory
+e1684_cache/
+e1684_files/
+teeth_cache/
+teeth_files/
+*.o
+*.so
+*~

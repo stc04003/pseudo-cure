@@ -1,0 +1,413 @@
+---
+title: "Analyzing the dental data with pseudo-observation approaches"
+data: March 25, 2022
+output:
+  rmarkdown::html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+bibliography: ReferenceCure.bib
+---
+
+```{r default, include = FALSE, collapse = TRUE}
+library(knitr)
+opts_chunk$set(prompt = TRUE, comment = "", cache = TRUE)
+```
+
+<script type="text/x-mathjax-config">
+MathJax.Hub.Config({
+  TeX: { equationNumbers: { autoNumber: "AMS" } }
+});
+</script>
+
+\newcommand{\Skm}{ {\hat{S}_{\scriptsize\text{KM}}}}
+\newcommand{\Skmi}{ {\hat{S}^i_{\scriptsize\text{KM}}}}
+\newcommand{\Skmoi}{ {\hat{S}^{-i}_{\scriptsize\text{KM}}}}
+\newcommand{\Fkm}{ {\hat{F}_{\scriptsize\text{KM}}}}
+\newcommand{\Fkmi}{ {\hat{F}^i_{\scriptsize\text{KM}}}}
+\newcommand{\Fkmoi}{ {\hat{F}^{-i}_{\scriptsize\text{KM}}}}
+\newcommand{\Tkm}{ {\hat{\theta}_{\scriptsize\text{KM}}}}
+\newcommand{\Tkmi}{ {\hat{\theta}^i_{\scriptsize\text{KM}}}}
+\newcommand{\Tkmoi}{ {\hat{\theta}^{-i}_{\scriptsize\text{KM}}}}
+\newcommand{\Su}{ {\hat{S}_u}}
+\newcommand{\Sui}{ {\hat{S}^i_u}}
+\newcommand{\Suoi}{ {\hat{S}^{-i}_u}}
+\newcommand{\pikm}{ {\hat{\pi}_{\scriptsize\text{KM}}}}
+\newcommand{\pikmi}{ {\hat{\pi}^i_{\scriptsize\text{KM}}}}
+\newcommand{\pikmoi}{ {\hat{\pi}^{-i}_{\scriptsize\text{KM}}}}
+
+In the following,
+we apply the proposed method to a dental data from the Creighton University School of Dentistry \citep{Calhoun2018MST}.
+We illustrated both the mixture cure (MC) and bounded cumulative hazard (BCH) models.
+In addition, we also illustrate the proposed variable selection procedure with penalized generalized estimating equations.
+
+## The Dental data
+### Data preparation
+The dataset is available from the R package `MST` [@Calhoun2018MST]:
+```{R}
+data(Teeth, package = "MST")
+head(Teeth[,1:10])
+```
+The `Teeth` data is a `data.frame` that contains 65228 patients and the 56 variables. 
+
+The dataset contains dental records from 5336 patients with periodontal disease collected between August 2007 and March 2013.
+Among the 5336 patients, 1382 patients experienced at least one periodontal tooth loss. 
+The outcome of interest is the time to the first tooth loss due to periodontal reasons for each patient, yielding a censoring rate of 74.1\%.
+The data analysis includes a total of 44 risk factors, whose detailed descriptions can be found in Tables 3 and 4 in @Calhoun2018MST. 
+The length of the follow-up was 5.7 years, and the last event occurred
+at 5.37 years for both malar and non-malar groups. There were 35 and 20 teeth censored between
+the last event and the end of the study for the malor group and non-molars group, respectively. 
+
+We convert `factor` variables into `numeric` variables to make it compatible with the `PGEE` package [@pgee].
+```{R}
+Teeth$x15 <- 1 * !(Teeth$x15 == "No Crown")
+Teeth$x16 <- 1 * !(Teeth$x16 == "No Endo Therapy")
+Teeth$x17 <- 1 * !(Teeth$x17 == "No Implant")
+Teeth$x18 <- 1 * !(Teeth$x18 == "No Bridge Pontic")
+Teeth$x19 <- 1 * !(Teeth$x19 == "Missing")
+Teeth$x20 <- 1 * !(Teeth$x20 == "Not Filled")
+Teeth$x21 <- 1 * !(Teeth$x21 == "Not Decayed")
+Teeth$x49 <- 1 * !(Teeth$x49 == "Male")
+Teeth$x50 <- 1 * !(Teeth$x50 == "No Diabetes")
+Teeth$x51 <- 1 * !(Teeth$x51 == "Never Had Tobacco")
+Teeth$x52 <- 1 * Teeth$molar
+```
+We then use the following code to extract the first tooth lose in each patient. 
+```{R}
+Teeth1 <- do.call(rbind, lapply(split(Teeth, Teeth$id), function(d) d[which.min(d$time),]))
+```
+
+The Maller-Zhou test [@maller1992estimating] results in a $p$-value of $< 0.001$ confirming the existence of cure. 
+```{R}
+npcure::testmz(time, event, Teeth1)
+```
+
+## Notations and models
+
+### Notations
+We define the following notations. 
+
+  - $Y$: cure status of a subject; 
+      - $Y = 1$ if the subject eventually experiences an event (uncured, susceptible)
+      - $Y = 0$ if the subject is a survivor (cured, non-susceptible).
+      
+  - $T$: survival time; 
+      - $T=YT^{*}+(1-Y)\times\infty$where $T^{*}<\infty$ is the failure time if the subject is susceptible.
+      
+  - $\tilde T$: observed survival time;  
+      - $\tilde{T}=\min\{T,C \}$, where $C$ is the censoring time. 
+      
+  - $\delta$: censoring indicator;
+      - $\delta = 1$, the subject experienced an event. This implies $Y=1$.
+      - $\delta = 0$, the subject was censored. The cure status $Y$ is not observed.
+      
+  - $X$ and $Z$ are vectors of covariates with dimensions $p$ and $q$, respectively.
+
+### Mixture cure model
+
+The MC model expresses the population survival function as
+\begin{equation}
+  \label{mixture}
+  S(t)=(1-\pi)+\pi S_{u}(t),
+\end{equation}
+where $\pi=P(Y=1)$ is the uncured rate and $S_{u}(t)$ is the conditional survival function of $T^*$ given $Y=1$.
+The two components, ***incidence*** and ***latency***, are modeled by the logistic regression model and the Cox proportional hazards model, respectively.
+We term this the PHMC model.
+
+
+### Bounded cumulative hazard model
+
+Suppose $\Lambda(t)$  is the cumulative hazard function of $T^*$ such that $\Lambda(\infty)=\theta>0$.
+Under the BCH model, the population survival function can be written as 
+\begin{equation*}\label{NonMC}
+  S(t)=\exp\{-\theta F(t)\},
+\end{equation*}
+where $F(t)=\Lambda(t)/\theta$ is a proper cumulative distribution function of a nonnegative random variable with
+$F(0)=0$ and $F(\infty)=\Lambda(\infty)/\theta=1$. 
+As $t\rightarrow \infty$,
+one has $\lim_{t\rightarrow \infty}S(t)=\exp(-\theta)$ which indicates the cure rate.
+The covariates have a **long-term** effect because $\theta$ describes the long-term survival probability.
+A common choice of $\theta(\cdot)$ is  $\theta( X)=\exp(\gamma_0+ \gamma^\top  X)$.
+@tsodikov2002semi extends the improper PH model by adding a **short-term** effect
+by incorporating covariates into $F(t)$ or survival function $\bar{F}(t)=1-F(t)$.
+The PHPH model of @tsodikov2003estimating has the form
+\begin{equation}
+\label{PHPH}
+  S(t)=\exp[-\theta( X)\{ 1-\bar{F}(t)^{\eta ( Z)} \} ],
+\end{equation}
+where $\eta ( Z)=\exp( \phi^\top  Z)$ and  $ \phi$ is a $q$-column vector of regression coefficients.
+To avoid overparameterization, we assume
+the coefficients $ \phi$ do not contain an intercept term as suggested in @tsodikov2003estimating.
+
+## MC model: The proposed pseudo-observation approach
+
+The proposed pseudo-observation approach estimates the regression coefficients in the incidence component and latency component separately. 
+
+### Incidence component
+
+The mixture cure model has two parameters, uncured rate $\pi$ and the conditional survival function $S_u(t)$, to be estimated. 
+The cure rate $1 - \pi$ can be estimated by $\Skm(t_{\max})$, 
+where $\Skm(t)$ is the Kaplan-Meier (KM) estimator [@maller1992estimating].
+The following is used to obtain $\pikm = 1 - \Skm(t_\max)$.
+```{R}
+n <- nrow(Teeth1)
+tmax <- max(Teeth1$time[Teeth1$event > 0])
+library(survival)
+KM <- survfit(Surv(time, event) ~ 1, data = Teeth1)
+(cure <- min(KM$surv))
+```
+
+The pseudo-observations of $\pikm$ for the $i$th subject is
+$$\pikmi = n\cdot\pikm - (n - 1)\cdot\pikmoi,$$
+where $\pikmoi = 1 - \Skmoi(t_\max)$ is the estimator for $\pi$ without the $i$th subject.
+The following creates a `data.frame` with the pseudo-observations of $\pikm$ stored under `curei`.
+```{R}
+Teeth.inc <- Teeth1
+Teeth.inc$id <- 1:n
+Teeth.inc$curei <- n * (1 - cure) - sapply(1:n, function(k) {
+  cure.deletei <- min(update(KM, subset = -k)$surv)
+  (n - 1) * (1 - cure.deletei)
+})
+head(Teeth.inc[,1:10])
+```
+We first define a formula object to include all covaraites.
+```{R}
+fn <- ~ x52 + x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + 
+  x11 + x12 + x13 + x14 + x15 + x16 + 
+  x20 + x21 + x23 + x24 + x25 + x26 + x27 + x28 + x29 + 
+  x30 + x32 + x33 + x34 + x35 + x36 + x37 + x38 + x39 + 
+  x40 + x42 + x43 + x44 + x45 + x46 + x48 + x49 + x50 + x51
+```
+The regression coefficient is estimated via GEE. 
+```{R}
+library(geepack)
+fit.inc <- geese(as.formula(paste("curei ~", fn)[2]),
+                 data = Teeth.inc, jack = TRUE, scale.fix = TRUE, family = gaussian, mean.link = "logit")
+
+summary(fit.inc)
+```
+
+With the initial value from `fit.inc`, 
+we perform the variable selection procedure based on penalized generalized estimating equations implemented in the `PGEE` package [@pgee].
+The implementation cross-validation procedure in `PGEE` is entirely written in R, 
+with multiple layers of loops, 
+resulting in an unbearable computation burden when applying it to the dental data. 
+We re-implemented the cross-validation procedure package in `C++` to improve the computational speed.
+We modify the `PGEE` package and create the alternative package `modifiedPGEE` 
+to replace `PGEE` in our illustration.
+```{R, message = FALSE}
+library(modifiedPGEE)
+packageVersion("modifiedPGEE")
+```
+A five-fold cross-validation procedure is used to select the tuning parameter. 
+The corresponding function from the `PGEE` package is `CVfit()`.
+The implementation of the `CVfit()` requires the response variable to be named `y`. 
+```{R}
+Teeth.inc$y <- Teeth.inc$curei
+system.time(
+  cv <- CVfit(as.formula(paste("y ~", fn)[2]), id = id, 
+              data = subset(Teeth.inc, select = c("y", "id", all.vars(fn))),
+              family = gaussian(link = "logit"), scale.fix = TRUE,
+              fold = 5, lambda.vec = 1:45 / 50, pindex = 1:2)
+)
+```
+With the tuning parameter from cross-validation, 
+we can fit the penalized generalized estimating equation with the following. 
+```{R}
+fit.inc2 <- PGEE(as.formula(paste("y ~", fn)[2]), id = id, data = Teeth.inc, 
+                 family = gaussian(link = "logit"), scale.fix = TRUE,
+                 beta_int = fit.inc$beta, lambda = cv$lam.opt, pindex = 1:2)
+```
+With a cut point of 0.001, the penalized regression coefficient estimate is the following.
+```{R}
+fit.inc2$coef[abs(fit.inc2$coef) > 1e-3]
+```
+
+### Latency component
+
+To estimate the regression coefficient in the latency component, we need to create pseudo-observations for $S_u(t)$.
+The MC model \eqref{mixture} implies $S_u(t)$ can be estimated by 
+$$\hat{S}_u(t) = \frac{\Skm(t) - \Skm(t_\max)}{1 - \Skm(t_\max)}.$$
+Thus, the pseudo-observation for $S_u(t)$ can be constructed by 
+\begin{equation*}
+\Sui(t) = n\cdot\Su(t) - (n - 1)\cdot\Suoi(t),
+\end{equation*}
+where
+\begin{equation*}
+\Suoi(t) = \frac{\Suoi(t) - \Suoi(t_\max)}{1 - \Suoi(t_\max)}
+\end{equation*}
+is the estimator for $S_u(t)$ without the $i$ subject.
+The following creates a `data.frame` with the pseudo-observations of $S_u(t)$ at $t = \{t_1, \ldots, t_H\}$ stored under variable `Si`.
+We consider the pseudo-observation times $t$ at the $10, 20, \ldots, 80, 90$, and the 95th percentiles of the observed survival times.
+```{R}
+t0 <- quantile(Teeth1$time[Teeth1$event > 0], c(1:9 / 10, .95))
+S <- KM$surv[findInterval(t0, KM$time)]
+Teeth.lat <- data.frame(
+  id = rep(1:n, each = length(t0)), 
+  Si = n * (S - cure) / (1 - cure) - c(sapply(1:n, function(k) { 
+    KM.reduce <- update(KM, subset = -k)
+    S.deletei <- KM.reduce$surv[findInterval(t0, KM.reduce$time)]  
+    cure.deletei <- min(KM.reduce$surv)
+    (n - 1) * (S.deletei - cure.deletei) / (1 - cure.deletei)
+  })),
+  Teeth1[rep(1:n, each = length(t0)),],
+  t = kronecker(rep(1, n), diag(length(t0))))
+Teeth.lat$Fi <- 1 - Teeth.lat$Si
+rownames(Teeth.lat) <- NULL
+head(Teeth.lat[,1:10])
+```
+
+Generalized linear model with a log function, $\log\{-\log(x)\}$, is used to estimate the regression coefficients in the latency component.
+However, the complementary log-log link function in standard R approaches, e.g., `geese()`, corresponds to $\log\{\log(x)\}$.
+We first define a new formula object to accommodate the pseudo-observation times.
+```{R}
+fn2 <- ~ 0 + t.1 + t.2 + t.3 + t.4 + t.5 + t.6 + t.7 + t.8 + t.9 + t.10 +
+  x52 + x1 + x2 + x3 + x4 + x5 + x6 + x7 + x8 + x9 + 
+  x11 + x12 + x13 + x14 + x15 + x16 + 
+  x20 + x21 + x23 + x24 + x25 + x26 + x27 + x28 + x29 + 
+  x30 + x32 + x33 + x34 + x35 + x36 + x37 + x38 + x39 + 
+  x40 + x42 + x43 + x44 + x45 + x46 + x48 + x49 + x50 + x51
+```
+We thus fit a GEE model with `Fi` as the response variable. 
+```{R}
+fit.lat <- geese(as.formula(paste("Fi ~", fn2)[2]), data = Teeth.lat, id = id, 
+                jack = TRUE, scale.fix = TRUE, family = gaussian, mean.link = "cloglog")
+summary(fit.lat)
+```
+
+
+With the initial value from `fit.lat`, 
+a five-fold cross-validation procedure is used to select the tuning parameter in `CVfit()`. 
+```{R}
+Teeth.lat$y <- Teeth.lat$Fi
+system.time(
+  cv <- CVfit(as.formula(paste("y ~", fn2)[2]), id = id, 
+              data = subset(Teeth.lat, select = c("y", "id", all.vars(fn2))),
+              family = gaussian(link = "cloglog"), scale.fix = TRUE,
+              fold = 5, lambda.vec = 1:45 / 50, pindex = 1:11)
+)
+```
+With the tuning parameter from cross-validation, 
+we can fit the penalized generalized estimating equation with the following. 
+```{R}
+fit.lat2 <- PGEE(as.formula(paste("y ~", fn2)[2]), id = id, data = Teeth.lat, 
+                 family = gaussian(link = "cloglog"), scale.fix = TRUE,
+                 beta_int = fit.lat$beta, lambda = cv$lam.opt, pindex = 1:11)
+```
+With a cut point of 0.001, the penalized regression coefficient estimate is the following.
+```{R}
+fit.lat2$coef[abs(fit.lat2$coef) > 1e-3]
+```
+
+
+## BCH model
+
+As in the MC model, the proposed pseudo-observation approach allows the 
+**short-term** and **long-term** covaraites effects in the BCH model to be estimated separately.
+
+### Long-term effect
+
+Since the cure rate $\lim_{t\rightarrow \infty}S(t)=\exp(-\theta)$ can be nonparametrically estimated by $\Skm(t_{\max})$,
+$\theta$ can be estimated by $\Tkm=-\log\Skm(t_{\max})$.
+The pseudo-observation of $\Tkm$ for the $i$th subject is 
+\begin{equation*}
+\Tkmi = n\cdot \Tkm - (n - 1)\cdot\Tkmoi.
+\end{equation*}
+The following codes create a `data.frame` with the pseudo-observation for $\Tkm$ stored under `thetai`.
+
+```{R}
+Teeth.long <- Teeth1
+Teeth.long$id <- 1:n
+Teeth.long$thetai <- n * (-log(cure)) - sapply(1:n, function(k) {
+  cure.deletei <- min(update(KM, subset = -k)$surv)
+  (n - 1) * (-log(cure.deletei))
+})
+head(Teeth.long[,1:10])
+```
+The regression coefficient is estimated via GEE.
+```{R}
+fit.long <- geese(as.formula(paste("thetai ~", fn)[2]), data = Teeth.long,
+                  jack = TRUE, scale.fix = TRUE, family = gaussian, mean.link = "log")
+summary(fit.long)
+```
+With the initial value from `fit.long`, 
+a five-fold cross-validation procedure is used to select the tuning parameter in `CVfit()`. 
+```{R}
+Teeth.long$y <- Teeth.long$thetai
+system.time(
+  cv <- CVfit(as.formula(paste("y ~", fn)[2]), id = id, 
+              data = subset(Teeth.long, select = c("y", "id", all.vars(fn))),
+              family = gaussian(link = "log"), scale.fix = TRUE,
+              fold = 5, lambda.vec = 1:45 / 50, pindex = 1:2)
+)
+```
+With the tuning parameter from cross-validation, 
+we can fit the penalized generalized estimating equation with the following. 
+```{R}
+fit.long2 <- PGEE(as.formula(paste("y ~", fn)[2]), id = id, data = Teeth.long, 
+                 family = gaussian(link = "log"), scale.fix = TRUE,
+                 beta_int = fit.long$beta, lambda = cv$lam.opt, pindex = 1:2)
+```
+With a cut point of 0.001, the penalized regression coefficient estimate is the following.
+```{R}
+fit.long2$coef[abs(fit.long2$coef) > 1e-3]
+```
+
+
+### Short-term effect
+
+Based @tsodikov2002semi, $F(t)$ can be consistently estimated by $\Fkm(t)=\log(\Skm(t))/\log(\Skm(t_{\max}))$.
+Thus, the pseudo-observations for $F(t)$ can be created by 
+\begin{equation*}
+  \Fkmi(t)=n\cdot\Fkm(t)-(n-1)\cdot\Fkmoi(t),
+\end{equation*}
+where $\Fkmoi(t)$ is the estimate of $\Fkm(t)$ without the $i$th subject.
+
+The following creates a `data.frame` with the pseudo-observations of $F(u)$ stored under variable `Fi`. 
+We consider the pseudo-observation times $t$ at the $10,20, \ldots, 80,90$, and the 95th percentiles of the observed survival times.
+```{R}
+Teeth.short <- data.frame(
+  id = rep(1:n, each = length(t0)), 
+  Fi = n * (log(S) / log(cure)) - c(sapply(1:n, function(k) {
+    KM.reduce <- update(KM, subset = -k)
+    S.deletei <- KM.reduce$surv[findInterval(t0, KM.reduce$time)]  
+    cure.deletei <- min(KM.reduce$surv)
+    (n - 1) * log(S.deletei) / log(cure.deletei) 
+  })),
+  Teeth1[rep(1:n, each = length(t0)), ], 
+  t = kronecker(rep(1, n), diag(length(t0))))
+rownames(Teeth.short) <- NULL
+head(Teeth.short[,1:10])
+```
+Generalized linear model with a log function, $\log\{−\log(x)\}$, is used to estimate the regression coefficients in the latency component. 
+```{R}
+fit.short <- geese(as.formula(paste("Fi ~", fn2)[2]), data = Teeth.short,id = id, 
+             jack = TRUE, scale.fix = TRUE, family = gaussian, mean.link = "cloglog")
+summary(fit.short)
+```
+
+With the initial value from `fit.short`, 
+a five-fold cross-validation procedure is used to select the tuning parameter in `CVfit()`. 
+```{R}
+Teeth.short$y <- Teeth.short$Fi
+system.time(
+  cv <- CVfit(as.formula(paste("y ~", fn2)[2]), id = id, 
+              data = subset(Teeth.short, select = c("y", "id", all.vars(fn2))),
+              family = gaussian(link = "cloglog"), scale.fix = TRUE,
+              fold = 5, lambda.vec = 1:45 / 50, pindex = 1:11)
+)
+```
+With the tuning parameter from cross-validation, 
+we can fit the penalized generalized estimating equation with the following. 
+```{R}
+fit.short2 <- PGEE(as.formula(paste("y ~", fn2)[2]), id = id, data = Teeth.short, 
+                 family = gaussian(link = "cloglog"), scale.fix = TRUE,
+                 beta_int = fit.short$beta, lambda = cv$lam.opt, pindex = 1:11)
+```
+With a cut point of 0.001, the penalized regression coefficient estimate is the following.
+```{R}
+fit.short2$coef[abs(fit.short2$coef) > 1e-3]
+```
+
+
+## Reference
