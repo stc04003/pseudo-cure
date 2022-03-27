@@ -144,7 +144,7 @@ the coefficients $ \phi$ do not contain an intercept term as suggested in @tsodi
 ## MC model: The EM-based approach
 
 The EM-based approach proposed by @peng2000nonparametric is available in 
-the `smcure()` function form the R package `smcure` [@cai2012smcure]. 
+the `smcure()` function from the R package `smcure` [@cai2012smcure]. 
 The arguments of `smcure()` are as follows
 ```{R}
 library(smcure)
@@ -163,7 +163,7 @@ The following fits `smcure()` to `e1684` with covaraites `AGE`, `TRT`, and `SEX`
 ```{R, error = TRUE}
 smcure(Surv(FAILTIME, FAILCENS) ~ AGE + TRT + SEX, 
        ~ AGE + TRT + SEX,
-  data = e1684, model = "ph", nboot = 100)
+       data = e1684, model = "ph", nboot = 100)
 ```
 
 There are some drawbacks in the implementation of the `smcure()` function. 

@@ -43,19 +43,19 @@ In addition, we also illustrate the proposed variable selection procedure with p
 
 ## The Dental data
 ### Data preparation
-The dataset is available from the R package `MST` [@Calhoun2018MST]:
+The data set is available from the R package `MST` [@Calhoun2018MST]:
 ```{R}
 data(Teeth, package = "MST")
 head(Teeth[,1:10])
 ```
 The `Teeth` data is a `data.frame` that contains 65228 patients and the 56 variables. 
 
-The dataset contains dental records from 5336 patients with periodontal disease collected between August 2007 and March 2013.
+The data set contains dental records from 5336 patients with periodontal disease collected between August 2007 and March 2013.
 Among the 5336 patients, 1382 patients experienced at least one periodontal tooth loss. 
 The outcome of interest is the time to the first tooth loss due to periodontal reasons for each patient, yielding a censoring rate of 74.1\%.
 The data analysis includes a total of 44 risk factors, whose detailed descriptions can be found in Tables 3 and 4 in @Calhoun2018MST. 
 The length of the follow-up was 5.7 years, and the last event occurred
-at 5.37 years for both malar and non-malar groups. There were 35 and 20 teeth censored between
+at 5.37 years for both molar and non-molar groups. There were 35 and 20 teeth censored between
 the last event and the end of the study for the malor group and non-molars group, respectively. 
 
 We convert `factor` variables into `numeric` variables to make it compatible with the `PGEE` package [@pgee].
@@ -195,7 +195,10 @@ resulting in an unbearable computation burden when applying it to the dental dat
 We re-implemented the cross-validation procedure package in `C++` to improve the computational speed.
 We modify the `PGEE` package and create the alternative package `modifiedPGEE` 
 to replace `PGEE` in our illustration.
+The source code of the `modifiedPGEE` package is in our `codes/` folder.
+The implementation uses the smoothly clipped absolute deviations (SCAD) penalty.
 ```{R, message = FALSE}
+## install.packages("modifiedPGEE_0.0.1.tar.gz", repo = NULL, type = "source") ## to install modifiedPGEE from source code
 library(modifiedPGEE)
 packageVersion("modifiedPGEE")
 ```
