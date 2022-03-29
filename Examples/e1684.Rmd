@@ -137,7 +137,7 @@ The PHPH model of @tsodikov2003estimating has the form
 \label{PHPH}
   S(t)=\exp[-\theta( X)\{ 1-\bar{F}(t)^{\eta ( Z)} \} ],
 \end{equation}
-where $\eta ( Z)=\exp( \phi^\top  Z)$ and  $ \phi$ is a $q$-column vector of regression coefficients.
+where $\eta ( Z)=\exp( \phi^\top  Z)$ and  $\phi$ is a $q$-column vector of regression coefficients.
 To avoid overparameterization, we assume
 the coefficients $\theta$ do not contain an intercept term as suggested in @tsodikov2003estimating.
 
