@@ -92,7 +92,7 @@ We define the following notations.
       - $Y = 0$ if the subject is a survivor (cured, non-susceptible).
       
   - $T$: survival time; 
-      - $T=YT^{*}+(1-Y)\times\infty$where $T^{*}<\infty$ is the failure time if the subject is susceptible.
+      - $T=YT^{*}+(1-Y)\times\infty$, where $T^{*}<\infty$ is the failure time if the subject is susceptible.
       
   - $\tilde T$: observed survival time;  
       - $\tilde{T}=\min\{T,C \}$, where $C$ is the censoring time. 
@@ -137,7 +137,7 @@ The PHPH model of @tsodikov2003estimating has the form
 \end{equation}
 where $\eta ( Z)=\exp( \phi^\top  Z)$ and  $ \phi$ is a $q$-column vector of regression coefficients.
 To avoid overparameterization, we assume
-the coefficients $ \phi$ do not contain an intercept term as suggested in @tsodikov2003estimating.
+the coefficients $\theta$ do not contain an intercept term as suggested in @tsodikov2003estimating.
 
 ## MC model: The proposed pseudo-observation approach
 
