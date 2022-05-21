@@ -1647,7 +1647,7 @@ Failure time distribution model:
 AGE -0.007664013 0.007276945 -1.0531910 0.2922535
 TRT -0.153595097 0.158226552 -0.9707290 0.3316833
 SEX  0.099458470 0.178815481  0.5562073 0.5780692</code></pre>
-<p>There are some drawbacks in the implementation of the <code>smcure()</code> function. One of which is in the <code>cureform</code> argument, which does not organize conventional approaches to specifying interaction terms such as <code>TRT * SEX</code>. To include the interaction terms <code>TRT * SEX</code> in <code>smcure()</code>, we need to manually specify the following.</p>
+<p>There are some drawbacks in the implementation of the <code>smcure()</code> function. One of which is in the <code>cureform</code> argument, which does not recognize conventional approaches to specifying interaction terms such as <code>TRT * SEX</code>. To include the interaction terms <code>TRT * SEX</code> in <code>smcure()</code>, we need to manually specify the following.</p>
 <pre class="r"><code>&gt; e1684$TRT.SEX &lt;- e1684$TRT * e1684$SEX
 &gt; coxPHMC &lt;- smcure(Surv(FAILTIME, FAILCENS) ~ AGE + TRT + SEX + TRT.SEX, 
 +                   ~ AGE + TRT + SEX + TRT.SEX, 

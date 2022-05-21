@@ -167,7 +167,7 @@ smcure(Surv(FAILTIME, FAILCENS) ~ AGE + TRT + SEX,
 ```
 
 There are some drawbacks in the implementation of the `smcure()` function. 
-One of which is in the `cureform` argument, which does not organize conventional approaches to 
+One of which is in the `cureform` argument, which does not recognize conventional approaches to 
 specifying interaction terms such as `TRT * SEX`.
 To include the interaction terms `TRT * SEX` in `smcure()`, we need to manually specify the following. 
 ```{R}
